@@ -16,7 +16,7 @@ except ImportError:
 BI_RM = list("0123456789abcdefghijklmnopqrstuvwxyz")
 B64MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-Referer = "https://m.cloud.189.cn/zt/2024/grow-guide/index.html#/"
+Referer = "https://m.cloud.189.cn/zt/2024/grow-guide/index.html#/"  # https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp
 
 
 class TG:
@@ -124,17 +124,7 @@ def rsa_encode(pubkey_str, text):
     return b64tohex(base64.b64encode(encrypted).decode())
 
 
-# 变量
-"""
-变量
-"""
-username, password = os.getenv("ACCOUNT").split(";")
-assert username and password, "请设置有效的 ACCOUNT 环境变量"
-UA = os.getenv("UA") or 'Mozilla/5.0'
-MODEL = os.getenv("MODEL") or "SM-G930K"
-
-
-def login_flow():
+def login_flow(username, password):
     session = init_session_with_retry()
     token_url = f"https://m.cloud.189.cn/udb/udb_login.jsp?pageId=1&pageKey=default&clientType=wap&redirectURL={Referer}"
     r = retry_request("GET", session, token_url, timeout=10)
@@ -181,12 +171,7 @@ def login_flow():
     return session
 
 
-def pusher(msg, account):
-    def user(usern):
-        if usern and usern != "None":
-            return "🙍🏻‍♂️ 账号" + mphone(usern) + "\n"
-        return ""
-
+def pusher(msg):
     if x := os.getenv("TG"):
         tg_bot = TG(*x.split(";"))
         now_beijing = format_to_iso(datetime.now(timezone.utc) + timedelta(hours=8))
@@ -194,8 +179,8 @@ def pusher(msg, account):
         msg = (f"\n"
                f"#ecloud *天翼云盘自动签到*\n"
                f"\n"
-               f"{user(account)}"
                f"{msg}\n"
+               f"\n"
                f"📅 *时间*：{now_beijing}\n")
 
         tg_bot.send_markdown(msg)
@@ -205,28 +190,34 @@ def format_to_iso(date):
     return date.strftime('%Y-%m-%d %H:%M:%S')
 
 
+def adduser(msg, usern):
+    if usern:
+        msg = "🙍🏻‍♂️ 账号" + mphone(usern) + "\n" + msg
+    return msg
+
+
 def mphone(phone):
     l = len(phone)
     masked_phone = f"{phone[:3]}{"\\*" * (l - 7)}{phone[l - 4:]}"
     return masked_phone
 
 
-def main():
+def single_checkin(username, password):
     try:
-        sess = login_flow()
+        sess = login_flow(username, password)
     except Exception as e:
         print("登录重试结束仍失败：", e)
-        pusher('❌ 错误，请查看运行日志！', username)
-        return
+        push = '❌ 错误，请查看运行日志！'
+        return push
 
     base_headers = {
-        'User-Agent': UA,
-        'Referer': f"{Referer}",  # "https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp",
+        'User-Agent': os.getenv("UA") or 'Mozilla/5.0',
+        'Referer': f"{Referer}",
         'Host': 'm.cloud.189.cn',
         'Accept-Encoding': 'gzip, deflate'
     }
     rand = str(int(time.time() * 1000))
-    sign_url = f'https://api.cloud.189.cn/mkt/userSign.action?rand={rand}&clientType=TELEANDROID&version=10.3.11&model={MODEL}'
+    sign_url = f'https://api.cloud.189.cn/mkt/userSign.action?rand={rand}&clientType=TELEANDROID&version=10.3.11&model={os.getenv("MODEL") or "SM-G930K"}'
 
     results = []
     try:
@@ -241,8 +232,8 @@ def main():
         results.append(msg)
     except Exception as e:
         print("签到失败：", e)
-        pusher(f"❌ 错误，请查看运行日志！", username)
-        return
+        push = '❌ 错误，请查看运行日志！'
+        return push
 
     # tasks = [
     #     ("TASK_SIGNIN", "ACT_SIGNIN", ""),
@@ -263,10 +254,36 @@ def main():
     #     except Exception as e:
     #         print(f"{label}抽奖失败：", e)
 
-    print("天翼云盘签到结果：\n")
+    print("天翼云盘签到结果：")
     push = "\n".join(results)
-    print(push)
-    pusher(push, username)
+    return push
+
+
+def main():
+    msg = ""
+    if (a := os.getenv("ACCOUNTS")) is None:
+        print("❌ 未设置 ACCOUNTS 环境变量")
+        pusher("❌ 未设置 ACCOUNTS 环境变量")
+        return
+    # 读取系统变量以 \n 或 && 分割变量
+    accounts = re.split('\n|&&', a)
+    print("✅ 检测到共：", len(accounts), "个天翼云盘账号\n")
+    i = 0
+    while i < len(accounts):
+        username, password = accounts[i].replace(" ", "").split(";")
+        try:
+            assert username and password, "请检查账号密码是否填写正确"
+        except AssertionError:
+            push = '❌ 错误，请查看运行日志！'
+        else:
+            push = single_checkin(username, password)
+        push = adduser(push, username)
+        msg += push
+        i += 1
+        if i != len(accounts):
+            msg += "\n\n"
+    print("推送预览：\n", msg)
+    pusher(msg)
 
 
 if __name__ == "__main__":
