@@ -1,4 +1,8 @@
-> fork from [`cloud189`](https://github.com/qqhsx/cloud189)
+> **Forked from**
+> [`qqhsx`](https://github.com/qqhsx/)
+> /
+> [`cloud189`](https://github.com/qqhsx/cloud189)。
+> <u>3ac5edd</u> - <u>2025-12-16</u>
 
 # Cloud189-Check-In
 
