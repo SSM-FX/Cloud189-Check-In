@@ -62,7 +62,7 @@ class Ecloud:
     globals()["MODEL"] = "SM-G930K"
     BI_RM = list("0123456789abcdefghijklmnopqrstuvwxyz")
     B64MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    Referer = "https://m.cloud.189.cn/zt/2024/grow-guide/index.html#/"  # https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp
+    Referer = "https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp"  # https://m.cloud.189.cn/zt/2024/grow-guide/index.html#/
 
     def __init__(self, username, password):
         self.username = username
@@ -70,7 +70,7 @@ class Ecloud:
 
     @staticmethod
     def retry_request(method, session, url, **kwargs):
-        max_retries = 5
+        max_retries = 3
         delay = 3
         for attempt in range(1, max_retries + 1):
             try:
@@ -133,18 +133,22 @@ class Ecloud:
 
     def login_flow(self):
         session = self.init_session_with_retry()
+        base_headers = {
+            'User-Agent': UA or "Mozilla 5.0",
+            'Accept-Encoding': 'gzip, deflate'
+        }
         token_url = f"https://m.cloud.189.cn/udb/udb_login.jsp?pageId=1&pageKey=default&clientType=wap&redirectURL={self.Referer}"
-        r = self.retry_request("GET", session, token_url, timeout=10)
+        r = self.retry_request("GET", session, token_url, headers=base_headers, timeout=10)
         m = re.search(r"https?://[^\s'\"]+", r.text)
         if not m:
             raise Exception("登录跳转 URL 获取失败")
         redirect = m.group()
-        r = self.retry_request("GET", session, redirect, timeout=10)
+        r = self.retry_request("GET", session, redirect, headers=base_headers, timeout=10)
         m2 = re.search(r"<a id=\"j-tab-login-link\"[^>]*href=\"([^\"]+)\"", r.text)
         if not m2:
             raise Exception("登录页面链接解析失败")
         href = m2.group(1)
-        r = self.retry_request("GET", session, href, timeout=10)
+        r = self.retry_request("GET", session, href, headers=base_headers, timeout=10)
 
         ct = re.findall(r"captchaToken' value='(.+?)'", r.text)[0]
         lt = re.findall(r'lt = "(.+?)"', r.text)[0]
@@ -168,14 +172,18 @@ class Ecloud:
             "mailSuffix": "@189.cn",
             "paramId": pid
         }
-        r = self.retry_request("POST", session, login_api, data=data, headers={'Referer': 'https://open.e.189.cn/'},
-                               timeout=10)
+        login_headers = {
+            'User-Agent': UA or "Mozilla 5.0",
+            'Referer': 'https://open.e.189.cn/',
+            'Accept-Encoding': 'gzip, deflate'
+        }
+        r = self.retry_request("POST", session, login_api, data=data, headers=login_headers, timeout=10)
         msg = r.json().get("msg", "无消息")
         print("登录响应：", msg)
         redirect_to = r.json().get("toUrl")
         if not redirect_to:
             raise Exception("登录跳转 URL 获取失败")
-        self.retry_request("GET", session, redirect_to, timeout=10)
+        self.retry_request("GET", session, redirect_to, headers=base_headers, timeout=10)
         return session
 
     def single_checkin(self):
